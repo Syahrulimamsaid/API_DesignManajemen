@@ -28,15 +28,15 @@ class Helper
     // }
     public static function IDGenerator($model, $prefix)
     {
-        $today = today()->format('ymd');
+        $today = today()->format('ym');
         $data = $model::orderBy('kode', 'desc')->first();
     
         if (!$data) {
             $id = $prefix . '-' . $today . '0001'; 
         } else {
-            $last_date = substr($data->kode, 4, 6); 
+            $last_date = substr($data->kode, 4, 4); 
             if ($last_date == $today) {
-                $last_number = (int)substr($data->kode, -4);
+                $last_number = (int)substr($data->kode, -2);
                 $last_number++;
                 $number = sprintf('%04d', $last_number); 
                 $id = $prefix . '-' . $today . $number;

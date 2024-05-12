@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use Exception;
 use App\Models\Job;
+use App\Models\User;
 use App\Models\TimeLines;
 use Illuminate\Http\Request;
+use App\Models\JobAssignment;
+use App\Models\QualityControl;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TimeLinesResource;
 use App\Http\Requests\StoreTimeLinesRequest;
 use App\Http\Requests\UpdateTimeLinesRequest;
-use App\Models\JobAssignment;
-use App\Models\QualityControl;
-use Exception;
 
 class TimeLinesController extends Controller
 {
@@ -40,9 +41,17 @@ class TimeLinesController extends Controller
         }
     }
 
-    public function calendar()
+    public function calendar($kode)
     {
-        $timelines = TimeLines::with('job_assignment.job', 'job_assignment.user')->get();
+        // $timelines = TimeLines::where('job_assignment_kode', $kode)->with('job_assignment.job', 'job_assignment.user')->get();
+
+        $designer = User::where('kode', $kode)->firstOrFail();
+        
+        $timelines = TimeLines::whereHas('job_assignment', function ($query) use ($designer) {
+            $query->where('designer_kode', $designer->kode);
+        })->with('job_assignment.job', 'job_assignment.user')->get();
+
+        // dd($timelines);
 
         $grouped = $timelines->groupBy('job_assignment.user.kode');
 
@@ -60,39 +69,21 @@ class TimeLinesController extends Controller
             ];
 
             foreach ($userTimelines as $timeline) {
-                $timelineData = [
-                    'id' => $timeline->id,
-                    'title' => $timeline->event,
-                    'subtitle' => $timeline->job_assignment->job->nama,
-                    'startDate' => ($timeline->event != 'Waktu Pengerjaan') ?  date_format(date_create($timeline->tanggal_event), 'Y-m-d') : date_format(date_create($timeline->mulai_pengerjaan), 'Y-m-d'),
-                    'endDate' => ($timeline->event != 'Waktu Pengerjaan') ?   date_format(date_create($timeline->tanggal_event), 'Y-m-d') :  date_format(date_create($timeline->selesai_pengerjaan), 'Y-m-d'),
-                    'description' => $this->description($timeline->event),
-                    'bgColor' => $this->color($timeline->event),
-                    'occupancy' => 3600
-                    // 'job_assignment_kode' => $timeline->job_assignment_kode,
-                    // 'quality_control_kode' => $timeline->quality_control_kode,
-                    // 'mulai_pengerjaan' => $timeline->mulai_pengerjaan,
-                    // 'selesai_pengerjaan' => $timeline->selesai_pengerjaan,
-                    // 'job_assignment' => [
-                    //     'id' => $timeline->job_assignment->id,
-                    //     'kode' => $timeline->job_assignment->kode,
-                    //     'job_kode' => $timeline->job_assignment->job_kode,
-                    //     'designer_kode' => $timeline->job_assignment->designer_kode,
-                    //     'tanggal_pengumpulan' => $timeline->job_assignment->tanggal_pengumpulan,
-                    //     'status' => $timeline->job_assignment->status,
-                    // ],
-                ];
+                if ($timeline->event != 'Mulai Pengerjaan' && $timeline->event != 'Pengumpulan') {
+                    $timelineData = [
+                        'id' => $timeline->id,
+                        'title' => $timeline->event,
+                        'subtitle' => $timeline->job_assignment->job->nama,
+                        'startDate' => ($timeline->event != 'Waktu Pengerjaan') ?  date_format(date_create($timeline->tanggal_event), 'Y-m-d') : date_format(date_create($timeline->mulai_pengerjaan), 'Y-m-d'),
+                        'endDate' => ($timeline->event != 'Waktu Pengerjaan') ?   date_format(date_create($timeline->tanggal_event), 'Y-m-d') :  date_format(date_create($timeline->selesai_pengerjaan), 'Y-m-d'),
+                        'description' => $this->description($timeline->event),
+                        'bgColor' => $this->color($timeline->event),
+                        'occupancy' => 3600
+                    ];
 
-                // $timelineData['job'] = [
-                //     'id' => $timeline->job_assignment->job->id,
-                //     'kode' => $timeline->job_assignment->job->kode,
-                //     'nama' => $timeline->job_assignment->job->nama,
-                //     'perusahaan' => $timeline->job_assignment->job->perusahaan,
-                // ];
-
-                $userData['data'][] = $timelineData;
+                    $userData['data'][] = $timelineData;
+                }
             }
-
             $responseData[] = $userData;
         }
         return Response($responseData);
@@ -101,9 +92,9 @@ class TimeLinesController extends Controller
     public function description($text)
     {
 
-        if (preg_match("/^Pengumpulan\sRevisi\w+$/", $text)) {
+        if (preg_match("/^Pengumpulan\sRevisi\s\d+$/", $text)) {
             return 'Revisi pekerjaan telah dikirim';
-        } else if (preg_match("/^Penjadwalan\sRevisi\w+$/", $text)) {
+        } else if (preg_match("/^Penjadwalan\sRevisi\s\d+$/", $text)) {
             return 'Penjadwalan pekerjan revisi telah dilakukan';
         } else {
             switch ($text) {
@@ -151,10 +142,10 @@ class TimeLinesController extends Controller
 
     public function color($text)
     {
-        if (preg_match("/^Pengumpulan\sRevisi\w+$/", $text)) {
-            return '#5fde35';
-        } else if (preg_match("/^Penjadwalan\sRevisi\w+$/", $text)) {
-            return '#8f35de';
+        if (preg_match("/^Pengumpulan\sRevisi\s\d+$/", $text)) {
+            return '#f26c2e';
+        } else if (preg_match("/^Penjadwalan\sRevisi\s\d+$/", $text)) {
+            return '#f26c2e';
         } else {
             switch ($text) {
                 case 'Waktu Pengerjaan':
@@ -162,7 +153,7 @@ class TimeLinesController extends Controller
                     break;
 
                 case 'Mulai Pengerjaan':
-                    return '#6835de';
+                    return '#0ee34e';
                     break;
 
                 case 'Lolos QC':
@@ -178,7 +169,7 @@ class TimeLinesController extends Controller
                     break;
 
                 case 'Tidak Lolos Koordinator':
-                    return '#e3a00e';
+                    return '#7d400a';
                     break;
 
                 case 'Pekerjaan diterima Customer':
@@ -190,7 +181,7 @@ class TimeLinesController extends Controller
                     break;
 
                 case 'Pengumpulan':
-                    return '#f22e73';
+                    return '#0ee34e';
                     break;
 
                 default;

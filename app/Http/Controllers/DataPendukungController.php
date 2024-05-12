@@ -19,7 +19,8 @@ class DataPendukungController extends Controller
      */
     public function index()
     {
-        //
+        $data_pendukung = DataPendukung::all();
+        return Response(['data'=>$data_pendukung]);
     }
 
 
@@ -31,22 +32,24 @@ class DataPendukungController extends Controller
     public function store(Request $request)
     {
         $request->validate(['job_kode' => 'required', 'nama' => 'required|file']);
-        // try {
-        $job = Job::where('kode', $request->job_kode)->firstOrFail();
-
         $fileName = $request->nama->getClientOriginalName();
-        Storage::putFileAs('data', $request->nama, $fileName);
 
-        $data_pendukung = new DataPendukung;
-        $data_pendukung['job_kode'] = $request->job_kode;
-        $data_pendukung['nama'] = $fileName;
-        $data_pendukung->save();
+        $dataPendukung = DataPendukung::where('nama', $fileName)->first();
+        // dd($dataPendukung);
+        if ($dataPendukung) {
+            return Response(['message' => 'Nama file Data Pendukung sudah ada.'], 400);
+        } else {
+            $job = Job::where('kode', $request->job_kode)->firstOrFail();
 
-        // return response()->json(['message' => 'data insert successfully']);
-        return Response($data_pendukung);
-        // } catch (Exception $e) {
-        //     return response()->json(['message' => 'data insert error', 'error' => $e->getMessage()], 500);
-        // }
+            Storage::putFileAs('data', $request->nama, $fileName);
+
+            $data_pendukung = new DataPendukung;
+            $data_pendukung['job_kode'] = $request->job_kode;
+            $data_pendukung['nama'] = $fileName;
+            $data_pendukung->save();
+
+            return Response($data_pendukung);
+        }
     }
 
     public function show($nama)

@@ -39,8 +39,8 @@ class QualityControlController extends Controller
                     return $item->petugas->role == 3 && $item->status == 1 && $item->job_assignment->job->status == 0;
                 });
 
+                $filteredQC->sortByDesc('job.kode');
                 $filteredArray = $filteredQC->values()->all();
-
                 return ['data' => $filteredArray];
             } catch (Exception $e) {
                 return Response(['error' => $e->getMessage()]);
@@ -172,10 +172,11 @@ class QualityControlController extends Controller
                     $item->job_assignment->job->tanggal_kirim = date_format(date_create($item->job_assignment->job->tanggal_kirim), 'Y/m/d');
                 });
 
-                $filteredArray = $filteredQC->values()->all();
+                $jobCollection = collect($filteredQC);
 
+                $sortedJobs = $jobCollection->sortByDesc('job_assignment.job.kode')->values()->all();
 
-                return ['data' => $filteredArray];
+                return Response(['data' => $sortedJobs]);
             } catch (Exception $e) {
                 return Response(['error' => $e->getMessage()]);
             }
@@ -185,7 +186,8 @@ class QualityControlController extends Controller
                     $jobAssignment->where('status', 4);
                 })->with('job:kode,id,nama,perusahaan,tanggal_kirim,catatan,hasil_design', 'user:kode,nama')->get();
 
-                return JobAssignmentResource::collection($jobsAssignment);
+                $jobSort = $jobsAssignment->sortByDesc('job.kode');
+                return JobAssignmentResource::collection($jobSort);
             } catch (Exception $e) {
                 return Response(['error' => $e->getMessage()]);
             }
@@ -203,5 +205,194 @@ class QualityControlController extends Controller
         })->orderBy('created_at', 'desc')->get();
 
         return ['data' => collect($qc)->unique('job_assignment_kode')->values()->all()];
+    }
+
+    public function revisionNotif()
+    {
+        if (Auth::user()->role == 1) {
+            try {
+
+                $qc = QualityControl::with('job_assignment.job', 'job_assignment.user')
+                    ->orderBy('created_at', 'desc')->get();
+
+                $groupedQC = $qc->groupBy('job_assignment_kode');
+
+                $latestQC = $groupedQC->map(function ($group) {
+                    return $group->first();
+                });
+
+                $filteredQC = $latestQC->filter(function ($item) {
+                    return $item->petugas->role == 3 && $item->status == 1 && $item->job_assignment->job->status == 0;
+                });
+
+                $jobsAssignment = JobAssignment::whereHas('job', function ($query) {
+                    $query->where('status', 6)->where('tanggapan_customer', 1);
+                })->with('job')->count();
+
+                $filteredCount = $filteredQC->count();
+                $jobsAssignmentCount = $jobsAssignment;
+
+
+                $result = $filteredCount + $jobsAssignmentCount;
+                // dd($result);
+
+                return Response(['data' => $result]);
+            } catch (Exception $e) {
+                return Response(['error' => $e->getMessage()]);
+            }
+        } else {
+            return Response(['message' => 'access denied']);
+        }
+    }
+    public function checkNotif()
+    {
+        if (Auth::user()->role == 1) {
+            try {
+
+                $qc = QualityControl::with('job_assignment.job.data_pendukung', 'job_assignment.user')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+
+                $groupedQC = $qc->groupBy('job_assignment_kode');
+
+                $latestQC = $groupedQC->map(function ($group) {
+                    return $group->first();
+                });
+
+                $filteredQC = $latestQC->filter(function ($item) {
+                    return $item->petugas->role == 3 && $item->status == 0 && $item->job_assignment->job->status == 0;
+                })->count();
+
+
+
+                return Response(['data' => $filteredQC]);
+            } catch (Exception $e) {
+                return Response(['error' => $e->getMessage()]);
+            }
+        } else {
+            return Response(['message' => 'access denied']);
+        }
+    }
+
+    public function commentQC()
+    {
+        // $jobsAssignment = JobAssignment::whereHas('job', function ($job) {
+        //     $job->whereIn('status', [5,0])->whereIn('tanggapan_customer', [0, null]);
+        // })->with('job', 'user')->get();
+
+        // $qcArray = [];
+
+        // foreach ($jobsAssignment as $item) {
+        //     switch ($item->job->status) {
+        //         case 5:
+        //             $qc = QualityControl::where('job_assignment_kode', $item->kode)->orderBy('created_at', 'desc')->get();
+
+        //             $groupedQC = $qc->groupBy('job_assignment_kode');
+
+        //             $latestQC = $groupedQC->map(function ($group) {
+        //                 return $group->first();
+        //             });
+
+        //             $filteredQC = $latestQC->filter(function ($item) {
+        //                 return $item->petugas->role == 3;
+        //             });
+
+        //             // dd($filteredQC->toArray());
+        //             $qcArray[$item->kode] = $filteredQC;
+        //             $item->qc = $filteredQC;
+        //             break;
+        //         case 0:
+        //             $qc = QualityControl::where('job_assignment_kode', $item->kode)->orderBy('created_at', 'desc')->get();
+
+        //             $groupedQC = $qc->groupBy('job_assignment_kode');
+
+        //             $latestQC = $groupedQC->map(function ($group) {
+        //                 return $group->first();
+        //             });
+
+        //             $filteredQC = $latestQC->filter(function ($item) {
+        //                 return $item->petugas->role == 3;
+        //             });
+
+        //             // dd($filteredQC->toArray());
+        //             $qcArray[$item->kode] = $filteredQC;
+        //             $item->qc = $filteredQC;
+        //             break;
+        //         default:
+        //             break;
+        //     }
+        // }
+        // $sortedJobsAssignment = $jobsAssignment->sortByDesc('qc.created_at');
+
+        // return Response(['data' => $sortedJobsAssignment]);
+
+        // $jobsAssignment = JobAssignment::whereHas('job', function ($job) {
+        //     $job->whereIn('status', [5, 0])->whereIn('tanggapan_customer', [0, null]);
+        // })->with('job', 'user')->get();
+
+        // $jobsAssignment = JobAssignment::whereHas('job', function ($job) {
+        //     $job->whereIn('status', [5, 0])
+        //         ->where(function ($query) {
+        //             $query->whereNull('tanggapan_customer')
+        //                   ->orWhere('tanggapan_customer', 0);
+        //         });
+        // })->with('job', 'user')->get();
+
+        // foreach ($jobsAssignment as $item) {
+        //     switch ($item->job->status) {
+        //         case 5:
+        //         case 0:
+        //             $qc = QualityControl::where('job_assignment_kode', $item->kode)->orderBy('created_at', 'desc')->get();
+
+        //             $groupedQC = $qc->groupBy('job_assignment_kode');
+
+        //             $latestQC = $groupedQC->map(function ($group) {
+        //                 return $group->first();
+        //             });
+
+        //             $filteredQC = $latestQC->filter(function ($item) {
+        //                 return $item->petugas->role == 3;
+        //             });
+
+        //             $item->qc = $filteredQC->isNotEmpty() ? $filteredQC->first() : null;
+        //             break;
+        //         default:
+        //             break;
+        //     }
+        // }
+
+        // $sortedJobsAssignment = $jobsAssignment->sortByDesc(function ($item) {
+        //     return optional($item->qc)->created_at;
+        // });
+
+        // return response(['data' => $sortedJobsAssignment->map(function ($jobAssignment) {
+        //     $jobAssignment->qc = $jobAssignment->qc !== null ? $jobAssignment->qc : null;
+        //     return $jobAssignment;
+        // })]);
+
+        $qc1 = QualityControl::with('job_assignment.job', 'job_assignment.user')
+            ->orderBy('created_at', 'desc')->get();
+
+        $groupedQC1 = $qc1->groupBy('job_assignment_kode');
+
+        $latestQC1 = $groupedQC1->map(function ($group1) {
+            return $group1->first();
+        });
+        $filteredQC1 = $latestQC1->filter(function ($item) {
+            return $item->petugas->role == 3 && $item->status == 1 &&
+                (
+                    (
+                        $item->job_assignment->job->tanggapan_customer == null ||
+                        $item->job_assignment->job->tanggapan_customer == 0
+                    ) &&
+                    (
+                        $item->job_assignment->job->status == 0 ||
+                        $item->job_assignment->job->status == 5
+                    )
+                );
+        })->values();
+        
+        return Response(['data' => $filteredQC1]);
+        
     }
 }

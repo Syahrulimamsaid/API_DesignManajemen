@@ -7,6 +7,7 @@ use App\Http\Controllers\DataPendukungController;
 use App\Http\Controllers\JobAssignmentController;
 use App\Http\Controllers\AuthenticationController;
 use App\Http\Controllers\QualityControlController;
+use App\Models\QualityControl;
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthenticationController::class, 'logout']);
@@ -25,6 +26,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::patch('/takejob/{kode}', [JobAssignmentController::class, 'update']);
     Route::post('/jobresult/{kode}', [JobController::class, 'design_result']);
     Route::post('/data', [DataPendukungController::class, 'store']);
+    Route::get('/data', [DataPendukungController::class, 'index']);
     Route::get('/timelines/{job_assignment_kode}', [TimeLinesController::class, 'show']);
     Route::patch('/jobrevisionschedulling/{kode}', [JobAssignmentController::class, 'jobRevisionScheduled']);
     Route::get('/data/{nama}', [DataPendukungController::class, 'show']);
@@ -39,8 +41,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/allJob', [JobAssignmentController::class, 'getJob']);
     Route::patch('/finallingjob/{kode}',[JobController::class,'jobResponse']);
     Route::get('/jobrejected', [JobAssignmentController::class, 'jobRejected']);
-    Route::get('/calendar', [TimeLinesController::class, 'calendar']);
+    Route::get('/calendar/{kode}', [TimeLinesController::class, 'calendar']);
+    Route::get('/user', [AuthenticationController::class, 'index']);
+    Route::post('/user', [AuthenticationController::class, 'store']);
+    Route::delete('/user', [AuthenticationController::class, 'destroy']);
+    Route::get('/revisionDetail/{kode}', [AuthenticationController::class, 'detail']);
+    Route::get('/revisionNotif', [QualityControlController::class, 'revisionNotif']);
+    Route::get('/checkNotif', [QualityControlController::class, 'checkNotif']);
+    Route::get('/jobOnProgress/{kode}', [JobAssignmentController::class, 'jobOnProgres']);
+    Route::get('/topDesigner', [JobAssignmentController::class, 'topDesigner']);
+    Route::get('/detailAssignment', [JobAssignmentController::class, 'detailAssignment']);
+    Route::get('/detailJob', [JobAssignmentController::class, 'detailJob']);
+    Route::get('/detailQC', [JobAssignmentController::class, 'detailQC']);
+    Route::get('/urgentDeadline', [JobAssignmentController::class, 'urgentDeadline']);
+    Route::get('/commentCustomer', [JobController::class, 'commentCustomer']);
+    Route::get('/commentQC', [QualityControlController::class, 'commentQC']);
+    Route::get('/detailDesigner/{kode}', [JobAssignmentController::class, 'detailDesigner']);
 });
 
 Route::post('/login', [AuthenticationController::class, 'login']);
-Route::post('/user', [AuthenticationController::class, 'store']);

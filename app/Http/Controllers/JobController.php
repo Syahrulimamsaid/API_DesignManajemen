@@ -27,24 +27,27 @@ class JobController extends Controller
     {
         if (Auth::user()->role == 2) {
             $request->validate([
-                'nama' => 'required|unique:jobs',
+                'nama' => 'required',
                 'perusahaan' => 'required',
             ]);
-            // try {
-            // $job= Job::where('nama',$request->nama)->firstOrFail();
-            $request['kode'] = Helper::IDGenerator(new Job, 'JOB');
 
-            $request['status'] = 1;
+            try {
+                $job = Job::where('nama', $request->nama)->first();
+                if ($job) {
+                    return response(['message' => 'Preparate sudah ada !!!'], 400);
+                } else {
+                    $request['kode'] = Helper::IDGenerator(new Job, 'JOB');
+                    $request['status'] = 1;
 
-            $job = Job::create($request->all());
+                    $job = Job::create($request->all());
 
-            return response()->json($job);
-            // return Response(['message' => 'data insert successfully']);
-            // } catch (Exception $e) {
-            //     return Response(['message' => 'data insert error', 'error' => $e->getMessage()]);
-            // }
+                    return response($job, 201);
+                }
+            } catch (Exception $e) {
+                return response(['message' => 'Terjadi kesalahan saat menyimpan data.', 'error' => $e->getMessage()], 500);
+            }
         } else {
-            return response()->json(['message' => 'access denied']);
+            return response(['message' => 'access denied'], 403);
         }
     }
 
@@ -53,6 +56,9 @@ class JobController extends Controller
         if (Auth::user()->role == 1) {
             $jobs = Job::all();
             $jobAssignment_kode = JobAssignment::pluck('job_kode')->toArray();
+
+            $jobsAssignment = JobAssignment::where('status', 0)->get();
+
             $jobResult = [];
             foreach ($jobs as $job) {
                 if (!in_array($job->kode, $jobAssignment_kode)) {
@@ -67,7 +73,27 @@ class JobController extends Controller
                     ];
                 }
             }
-            return response()->json(['data' => $jobResult]);
+
+            foreach ($jobsAssignment as $jobAssignment) {
+                $jobResult[] = [
+                    'id' => $jobAssignment->job->id,
+                    'kode' => $jobAssignment->job->kode,
+                    'nama' => $jobAssignment->job->nama,
+                    'perusahaan' => $jobAssignment->job->perusahaan,
+                    'tanggal_kirim' => date_format(date_create($jobAssignment->job->tanggal_kirim), 'Y/m/d'),
+                    'status_data' => $jobAssignment->job->status_data,
+                    'status' => $jobAssignment->job->status,
+                    'tanggapan_customer' => $jobAssignment->job->tanggapan_customer,
+                    'tanggal_pengumpulan' => date_format(date_create($jobAssignment->tanggal_pengumpulan), 'Y/m/d'),
+                    'designer' => $jobAssignment->user->nama,
+                ];
+            }
+
+            $jobCollection = collect($jobResult);
+
+            $sortedJobs = $jobCollection->sortByDesc('kode')->values()->all();
+
+            return response()->json(['data' => $sortedJobs]);
         } else {
             return response()->json(['message' => 'access denied']);
         }
@@ -77,23 +103,34 @@ class JobController extends Controller
     {
         if (Auth::user()->role == 4) {
             $job = Job::where('kode', $kode)->firstOrFail();
-            $request->validate(['hasil_design' => 'required|mimes:png,jpg,jpeg,ai,psd,cdr']);
-
+            // dd($request->file('hasil_design')->getClientMimeType());
+            
+            $request->validate(['hasil_design' => 'required|mimes:png,jpg,jpeg,ai,pdf,psd,cdr'], [
+                'hasil_design.mimes' => 'Format file tidak sesuai.'
+            ]);
+            
+            $cek = $request->file('hasil_design')->getClientMimeType(); 
             $design = null;
             if ($request->hasil_design) {
                 $fileName = "design_{$job->nama}" . today()->format('ymd');
                 $extension = $request->hasil_design->extension();
+                if($cek == 'application/postscript'){
+                    $extension= 'ai';
+                }
+                else if($cek == 'application/pdf')
+                {
+                    $extension = 'pdf';
+                }
                 $design = $fileName . '.' . $extension;
 
                 Storage::putFileAs('design', $request->hasil_design, $design);
 
                 $request['hasil_design'] = $design;
             }
-
             $job->fill([
                 'hasil_design' => $design,
                 'status' => 4,
-                'tanggapan_customer'=>0
+                'tanggapan_customer' => 0
             ]);
             $job->save();
 
@@ -177,9 +214,10 @@ class JobController extends Controller
     public function getJobPost()
     {
         if (Auth::user()->role == 2) {
-            $job = Job::whereIn('status', [1, 2])->get();
+            $job = Job::whereIn('status', [1, 2])->orderBy('kode', 'desc')->get();
+            // $jobSort = $job->sortBy('kode');
+            // $jobSort = $job->orderBy('kode','desc');
             return JobResource::collection($job->loadMissing('data_pendukung'));
-            // return Response($job);
         } else {
             return Response(['message' => 'access denied']);
         }
@@ -217,24 +255,54 @@ class JobController extends Controller
                     'job_assignment_kode' => $kode,
                 ]);
             } else if ($request->tanggapan_customer == 1) {
-                // $request['status'] = 5;
-                $job->update($request->all());
+                $request->validate(['tanggapan_customer' => 'required', 'komentar' => 'required']);
 
-                // QualityControl::create([
-                //     'kode' => Helper::IDGenerator(new QualityControl, 'QCL'), 'status' => 1,
-                //     'petugas_kode' => Auth::user()->kode,
-                //     'job_assignment_kode' => $kode
-                // ]);
+                $job->update(['tanggapan_customer' => $request->tanggapan_customer]);
+
+                $qcKode = Helper::IDGenerator(new QualityControl, 'QCL');
+
+                QualityControl::create([
+                    'kode' => $qcKode, 'status' => 1,
+                    'petugas_kode' => Auth::user()->kode,
+                    'komentar' => $request->komentar,
+                    'job_assignment_kode' => $kode
+                ]);
 
                 TimeLines::create([
                     'event' => 'Pekerjaan ditolak Customer',
                     'tanggal_event' => now()->format('Y/m/d H:i:s'),
                     'job_assignment_kode' => $kode,
+                    'quality_control_kode' => $qcKode,
                 ]);
             }
             return Response($job);
         } else {
             return Response(['message' => 'access denied']);
         }
+    }
+
+    public function commentCustomer()
+    {
+        $jobsAssignment = JobAssignment::whereHas('job', function ($job) {
+            $job->where('status', 6)->whereNotNull('tanggapan_customer')->where('tanggapan_customer', 1);
+        })->with('job')->get();
+
+        $qcArray = [];
+
+        foreach ($jobsAssignment as $item) {
+            switch ($item->job->tanggapan_customer) {
+                case 1:
+                    $qc = QualityControl::where('job_assignment_kode', $item->kode)->orderBy('created_at', 'desc')->first();
+
+                    $qcArray[$item->kode] = $qc;
+                    $item->qc = $qc;
+                    break;
+                default:
+                    break;
+            }
+        }
+        $sortedJobsAssignment = $jobsAssignment->sortBy('qc.created_at');
+
+        return Response(['data' => $sortedJobsAssignment]);
     }
 }
